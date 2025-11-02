@@ -25,6 +25,16 @@ app.get('/', (req, res) => {
   res.json({ status: 'ClipBattle API is running!' });
 });
 
+// Helper function to get video duration
+function getVideoDuration(videoPath) {
+  return new Promise((resolve, reject) => {
+    ffmpeg.ffprobe(videoPath, (err, metadata) => {
+      if (err) reject(err);
+      else resolve(metadata.format.duration);
+    });
+  });
+}
+
 // Video processing endpoint
 app.post('/create', upload.fields([
   { name: 'video1', maxCount: 1 },
@@ -39,10 +49,18 @@ app.post('/create', upload.fields([
 
     console.log('Processing videos:', video1.originalname, video2.originalname);
 
+    console.log('Processing videos:', video1.originalname, video2.originalname);
+
+    // Get video durations first
+    const duration1 = await getVideoDuration(video1.path);
+    const duration2 = await getVideoDuration(video2.path);
+
+    console.log('Video 1 duration:', duration1, 'Video 2 duration:', duration2);
+
     // Process videos with FFmpeg
-    // 1. Scale each video to 1080x960 (9:16 aspect ratio, half height)
-    // 2. Stack them vertically
-    // 3. Play sequentially (concat)
+    // Create split-screen where:
+    // - Phase 1: top video plays, bottom shows grayed first frame
+    // - Phase 2: top shows grayed last frame, bottom video plays
     
     ffmpeg()
       .input(video1.path)
@@ -51,19 +69,31 @@ app.post('/create', upload.fields([
         // Scale both videos to 1080x960 (half of 1080x1920)
         '[0:v]scale=1080:960:force_original_aspect_ratio=decrease,pad=1080:960:(ow-iw)/2:(oh-ih)/2,setsar=1[v0]',
         '[1:v]scale=1080:960:force_original_aspect_ratio=decrease,pad=1080:960:(ow-iw)/2:(oh-ih)/2,setsar=1[v1]',
-        // Concatenate videos
-        '[v0][0:a][v1][1:a]concat=n=2:v=1:a=1[outv][outa]'
+        
+        // Create grayed out still frames
+        '[v1]trim=end_frame=1,loop=loop=-1:size=1,colorchannelmixer=.3:.4:.3:0:.3:.4:.3:0:.3:.4:.3:0,eq=brightness=-0.3,trim=duration=' + duration1 + ',setpts=PTS-STARTPTS[v1gray]',
+        '[v0]reverse,trim=end_frame=1,loop=loop=-1:size=1,colorchannelmixer=.3:.4:.3:0:.3:.4:.3:0:.3:.4:.3:0,eq=brightness=-0.3,trim=duration=' + duration2 + ',setpts=PTS-STARTPTS[v0gray]',
+        
+        // Stack for phase 1 (top playing, bottom grayed)
+        '[v0][v1gray]vstack=inputs=2[phase1]',
+        
+        // Stack for phase 2 (top grayed, bottom playing)  
+        '[v0gray][v1]vstack=inputs=2[phase2]',
+        
+        // Concatenate both phases
+        '[phase1][0:a][phase2][1:a]concat=n=2:v=1:a=1[outv][outa]'
       ])
       .outputOptions([
         '-map', '[outv]',
         '-map', '[outa]',
         '-c:v', 'libx264',
-        '-preset', 'medium',
-        '-crf', '23',
+        '-preset', 'fast',
+        '-crf', '28',
         '-c:a', 'aac',
-        '-b:a', '128k',
-        '-s', '1080x1920', // Final 9:16 resolution
-        '-r', '30'
+        '-b:a', '96k',
+        '-s', '1080x1920',
+        '-r', '30',
+        '-movflags', '+faststart'
       ])
       .output(outputPath)
       .on('start', (commandLine) => {

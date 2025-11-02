@@ -66,13 +66,15 @@ app.post('/create', upload.fields([
       .input(video1.path)
       .input(video2.path)
       .complexFilter([
-        // Scale both videos to 1080x960 (half of 1080x1920)
-        '[0:v]scale=1080:960:force_original_aspect_ratio=decrease,pad=1080:960:(ow-iw)/2:(oh-ih)/2,setsar=1[v0]',
-        '[1:v]scale=1080:960:force_original_aspect_ratio=decrease,pad=1080:960:(ow-iw)/2:(oh-ih)/2,setsar=1[v1]',
+        // Scale both videos and split them
+        '[0:v]scale=1080:960:force_original_aspect_ratio=decrease,pad=1080:960:(ow-iw)/2:(oh-ih)/2,setsar=1,split=2[v0][v0copy]',
+        '[1:v]scale=1080:960:force_original_aspect_ratio=decrease,pad=1080:960:(ow-iw)/2:(oh-ih)/2,setsar=1,split=2[v1][v1copy]',
         
-        // Create grayed out still frames
-        '[v1]trim=end_frame=1,loop=loop=-1:size=1,colorchannelmixer=.3:.4:.3:0:.3:.4:.3:0:.3:.4:.3:0,eq=brightness=-0.3,trim=duration=' + duration1 + ',setpts=PTS-STARTPTS[v1gray]',
-        '[v0]reverse,trim=end_frame=1,loop=loop=-1:size=1,colorchannelmixer=.3:.4:.3:0:.3:.4:.3:0:.3:.4:.3:0,eq=brightness=-0.3,trim=duration=' + duration2 + ',setpts=PTS-STARTPTS[v0gray]',
+        // Create grayed out still frame from video 2 first frame (for bottom during video 1)
+        '[v1copy]trim=end_frame=1,loop=loop=-1:size=1,colorchannelmixer=.3:.4:.3:0:.3:.4:.3:0:.3:.4:.3:0,eq=brightness=-0.3,trim=duration=' + duration1 + ',setpts=PTS-STARTPTS[v1gray]',
+        
+        // Create grayed out still frame from video 1 last frame (for top during video 2)
+        '[v0copy]reverse,trim=end_frame=1,loop=loop=-1:size=1,colorchannelmixer=.3:.4:.3:0:.3:.4:.3:0:.3:.4:.3:0,eq=brightness=-0.3,trim=duration=' + duration2 + ',setpts=PTS-STARTPTS[v0gray]',
         
         // Stack for phase 1 (top playing, bottom grayed)
         '[v0][v1gray]vstack=inputs=2[phase1]',

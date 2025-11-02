@@ -47,6 +47,11 @@ app.post('/create', upload.fields([
   { name: 'video1', maxCount: 1 },
   { name: 'video2', maxCount: 1 }
 ]), async (req, res) => {
+  // Set CORS headers explicitly
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type');
+  
   try {
     const video1 = req.files.video1[0];
     const video2 = req.files.video2[0];

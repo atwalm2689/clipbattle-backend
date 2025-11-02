@@ -29,6 +29,9 @@ app.get('/', (req, res) => {
   res.json({ status: 'ClipBattle API is running!' });
 });
 
+// Handle CORS preflight requests
+app.options('/create', cors());
+
 // Helper function to get video duration
 function getVideoDuration(videoPath) {
   return new Promise((resolve, reject) => {
